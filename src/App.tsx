@@ -3,6 +3,7 @@ import { DashboardPage } from './ui/routes/DashboardPage';
 import { PlanPage } from './ui/routes/PlanPage';
 import { StudyPage } from './ui/routes/StudyPage';
 import { SessionBar } from './ui/components/SessionBar';
+import { StaleSessionBanner } from './ui/components/StaleSessionBanner';
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
         </nav>
         <SessionBar />
       </header>
+      <StaleSessionBanner />
       <main>
         <Routes>
           <Route path="/" element={<DashboardPage />} />

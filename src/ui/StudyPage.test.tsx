@@ -30,6 +30,19 @@ describe('StudyPage', () => {
     expect((await getActiveSession())?.itemId).toBeDefined();
   });
 
+  it('starts an area-level session (no item) from the Start button next to the area heading', async () => {
+    const user = userEvent.setup();
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    await createItem({ areaId: area.id, title: 'CAP theorem', kind: 'note' });
+    render(<StudyPage />);
+    await user.click(await screen.findByRole('button', { name: `Start ${area.name}` }));
+    await waitFor(async () => {
+      const active = await getActiveSession();
+      expect(active?.areaId).toBe(area.id);
+      expect(active?.itemId).toBeUndefined();
+    });
+  });
+
   it('minimal-mode areas show a done-tick instead of metadata (UC-5)', async () => {
     const user = userEvent.setup();
     const area = await createArea({ name: 'Drills', preset: 'minimal' });

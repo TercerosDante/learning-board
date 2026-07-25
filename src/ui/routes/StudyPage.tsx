@@ -1,35 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { listAreas, listItemsForArea } from '../../data/queries';
-import {
-  addManualSession, getActiveSession, getStaleActiveSession,
-  startSession, trimSessionToLastTick,
-} from '../../services/sessions';
+import { addManualSession, getActiveSession, startSession } from '../../services/sessions';
 import { isDrillDoneToday, setDrillDone } from '../../services/items';
-import type { Area, Item, Session } from '../../domain/types';
+import type { Area, Item } from '../../domain/types';
 import { NoteEditor } from '../components/NoteEditor';
-
-function StaleSessionBanner() {
-  const [stale, setStale] = useState<Session | null>(null);
-  useEffect(() => {
-    void getStaleActiveSession().then(setStale);
-  }, []);
-  if (!stale) return null;
-  return (
-    <div className="banner">
-      A session from {new Date(stale.startedAt).toLocaleString()} is still running.{' '}
-      <button
-        onClick={() => {
-          void trimSessionToLastTick(stale.id);
-          setStale(null);
-        }}
-      >
-        End it at last activity
-      </button>{' '}
-      <button onClick={() => setStale(null)}>Keep it running</button>
-    </div>
-  );
-}
 
 function DrillRow({ item }: { item: Item }) {
   const done = useLiveQuery(() => isDrillDoneToday(item.id), [item.id]);
@@ -52,7 +27,12 @@ function StudyAreaSection({ area }: { area: Area }) {
   const [minutes, setMinutes] = useState('');
   return (
     <section className="card">
-      <h3>{area.name}</h3>
+      <h3>
+        {area.name}{' '}
+        <button aria-label={`Start ${area.name}`} onClick={() => void startSession({ areaId: area.id })}>
+          Start
+        </button>
+      </h3>
       <ul>
         {(items ?? []).map((item) =>
           area.profile.minimalMode && item.kind === 'practice' ? (
@@ -90,7 +70,6 @@ export function StudyPage() {
   return (
     <div>
       <h2>Study</h2>
-      <StaleSessionBanner />
       {active?.itemId && <NoteEditor itemId={active.itemId} />}
       {(areas ?? []).map((a) => (
         <StudyAreaSection key={a.id} area={a} />
