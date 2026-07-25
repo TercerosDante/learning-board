@@ -32,4 +32,11 @@ describe('weekPlan service', () => {
     const updated = await db.weekPlans.get(plan.id);
     expect(updated?.entries).toEqual([{ areaId: a.id, targetMinutes: 90, focusItemIds: [item.id] }]);
   });
+
+  it('concurrent getOrCreateWeekPlan calls create only one plan', async () => {
+    await createArea({ name: 'A', preset: 'practice', weeklyTargetMinutes: 120 });
+    const [plan1, plan2] = await Promise.all([getOrCreateWeekPlan(friday), getOrCreateWeekPlan(friday)]);
+    expect(plan1.id).toBe(plan2.id);
+    expect(await db.weekPlans.count()).toBe(1);
+  });
 });
