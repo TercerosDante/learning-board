@@ -26,9 +26,9 @@ describe('PlanPage', () => {
     await user.click(screen.getByRole('button', { name: 'Add item' }));
     await screen.findByText('Two pointers');
 
-    await pickOption(user, screen.getByLabelText('Topic for Two pointers'), 'Patterns');
     await user.type(screen.getByLabelText('Estimate for Two pointers'), '30');
     await user.tab();
+    await pickOption(user, screen.getByLabelText('Topic for Two pointers'), 'Patterns');
 
     await waitFor(async () => {
       const item = (await db.items.toArray())[0];
