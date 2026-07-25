@@ -1,6 +1,6 @@
 import { db } from '../data/db';
 import { dayKey } from '../domain/time';
-import type { Item, ItemKind } from '../domain/types';
+import type { Item, ItemKind, ItemStatus } from '../domain/types';
 
 const KIND_REVIEW_DEFAULT: Record<ItemKind, boolean> = {
   note: true,
@@ -84,4 +84,16 @@ export async function setDrillDone(itemId: string, done: boolean, now = new Date
 
 export async function isDrillDoneToday(itemId: string, now = new Date()): Promise<boolean> {
   return (await todaysAttempts(itemId, now)).length > 0;
+}
+
+export async function setItemStatus(id: string, status: ItemStatus, now = new Date()): Promise<void> {
+  await db.items.update(id, { status, updatedAt: now.toISOString() });
+}
+
+export async function updateItem(
+  id: string,
+  patch: Partial<Pick<Item, 'title' | 'estimateMinutes' | 'topicId' | 'tags' | 'keyIdea'>>,
+  now = new Date()
+): Promise<void> {
+  await db.items.update(id, { ...patch, updatedAt: now.toISOString() });
 }

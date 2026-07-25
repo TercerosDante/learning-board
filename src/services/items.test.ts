@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createArea } from './areas';
-import { createItem, touchItem, saveNote, getNoteText, setDrillDone, isDrillDoneToday } from './items';
+import { createItem, touchItem, saveNote, getNoteText, setDrillDone, isDrillDoneToday, setItemStatus, updateItem } from './items';
 import { db } from '../data/db';
 import { resetDb } from '../test/resetDb';
 
@@ -46,5 +46,23 @@ describe('items service', () => {
     await setDrillDone(item.id, false, now);
     expect(await isDrillDoneToday(item.id, now)).toBe(false);
     expect(await db.attempts.count()).toBe(0);
+  });
+
+  it('setItemStatus applies manual lifecycle moves', async () => {
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    const item = await createItem({ areaId: area.id, title: 'X', kind: 'note' });
+    await setItemStatus(item.id, 'learned');
+    expect((await db.items.get(item.id))?.status).toBe('learned');
+  });
+
+  it('updateItem patches estimate and topic and bumps updatedAt', async () => {
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    const item = await createItem({ areaId: area.id, title: 'X', kind: 'note' }, new Date(2026, 6, 20));
+    await updateItem(item.id, { estimateMinutes: 45 }, new Date(2026, 6, 25));
+    const updated = await db.items.get(item.id);
+    expect(updated?.estimateMinutes).toBe(45);
+    expect(updated?.updatedAt).not.toBe(item.updatedAt);
+    await updateItem(item.id, { estimateMinutes: undefined });
+    expect((await db.items.get(item.id))?.estimateMinutes).toBeUndefined();
   });
 });
