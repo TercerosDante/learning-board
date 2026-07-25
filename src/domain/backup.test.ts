@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BACKUP_FORMAT, CURRENT_SCHEMA_VERSION, TABLE_NAMES, buildBackup, validateBackup } from './backup';
+import { BACKUP_FORMAT, CURRENT_SCHEMA_VERSION, TABLE_NAMES, buildBackup, validateBackup, backupReminderDue } from './backup';
 
 function emptyTables() {
   return Object.fromEntries(TABLE_NAMES.map((n) => [n, [] as unknown[]])) as Record<(typeof TABLE_NAMES)[number], unknown[]>;
@@ -33,5 +33,20 @@ describe('backup format', () => {
   it('rejects non-objects', () => {
     expect(validateBackup(null).ok).toBe(false);
     expect(validateBackup('hi').ok).toBe(false);
+  });
+});
+
+describe('backupReminderDue', () => {
+  const now = new Date(2026, 6, 25, 12, 0);
+
+  it('is due when never exported', () => {
+    expect(backupReminderDue(undefined, now)).toBe(true);
+  });
+
+  it('is due at/after the threshold and not before', () => {
+    const fresh = new Date(2026, 6, 20, 12, 0).toISOString(); // 5 days ago
+    const stale = new Date(2026, 6, 11, 12, 0).toISOString(); // exactly 14 days ago
+    expect(backupReminderDue(fresh, now)).toBe(false);
+    expect(backupReminderDue(stale, now)).toBe(true);
   });
 });
