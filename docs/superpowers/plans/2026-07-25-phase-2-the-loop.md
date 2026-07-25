@@ -97,7 +97,7 @@ Replace the first two rules of `src/index.css` (the `* { box-sizing… }` reset 
 @import "tailwindcss";
 ```
 
-Keep the remaining legacy classes for now — `PlanPage` still uses `.card` until Task 10. (After the shadcn init in Step 2 rewrites this file, re-check that both the tailwind import/theme AND the legacy `.card`, `.banner`, `.session-bar`, `.app-header`, `textarea.note`, `.error` rules survive; the converted components stop using most of them this task, and Task 10 retires the rest.)
+`PlanPage` still uses `.card` until Task 10, so after the shadcn init in Step 2 rewrites this file, re-check that both the tailwind import/theme AND the legacy `.card` rule survive. The other legacy rules (`.banner`, `.session-bar`, `.app-header`, `textarea.note`, `.error`) lose their last consumers in this task's conversions and are removed here; Task 10 retires `.card`.
 
 - [ ] **Step 2: Initialize shadcn/ui and add the primitives**
 
