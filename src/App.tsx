@@ -4,6 +4,7 @@ import { PlanPage } from './ui/routes/PlanPage';
 import { StudyPage } from './ui/routes/StudyPage';
 import { SessionBar } from './ui/components/SessionBar';
 import { StaleSessionBanner } from './ui/components/StaleSessionBanner';
+import { QuickCapture } from './ui/components/QuickCapture';
 
 export function App() {
   return (
@@ -14,6 +15,7 @@ export function App() {
           <NavLink to="/plan" className={({ isActive }) => (isActive ? 'font-bold' : '')}>Plan</NavLink>
           <NavLink to="/study" className={({ isActive }) => (isActive ? 'font-bold' : '')}>Study</NavLink>
         </nav>
+        <QuickCapture />
         <SessionBar />
       </header>
       <StaleSessionBanner />
