@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getNoteText, saveNote } from '../../services/items';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 const SAVE_DEBOUNCE_MS = 1000;
 
@@ -53,13 +55,17 @@ export function NoteEditor({ itemId }: { itemId: string }) {
 
   if (!loaded) return null;
   return (
-    <div className="card">
-      <button onClick={() => setPreview((p) => !p)}>{preview ? 'Edit' : 'Preview'}</button>
+    <div className="space-y-2 rounded-lg border p-4">
+      <Button size="sm" variant="outline" onClick={() => setPreview((p) => !p)}>
+        {preview ? 'Edit' : 'Preview'}
+      </Button>
       {preview ? (
-        <ReactMarkdown>{text}</ReactMarkdown>
+        <div className="text-sm">
+          <ReactMarkdown>{text}</ReactMarkdown>
+        </div>
       ) : (
-        <textarea
-          className="note"
+        <Textarea
+          className="min-h-48 font-mono"
           aria-label="Notes"
           value={text}
           onChange={(e) => handleChange(e.target.value)}
