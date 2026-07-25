@@ -6,9 +6,11 @@ See `docs/product-brief.md` (what & why), `docs/architecture.md`, `docs/data-mod
 
 ## Status
 
-Phase 1 (walking skeleton): areas & items, study sessions, consistency metrics,
-markdown notes, full export/import. All data lives in this browser's IndexedDB —
-**export regularly; the backup file is the only safety net.**
+Phase 2 (the loop): everything from phase 1, plus global quick-capture (Ctrl+K) with an
+inbox, a Review surface (triage, manual item lifecycle, backup reminder), topics and
+estimates and a weekly plan on the Plan surface, and the coverage metric on the dashboard.
+All data lives in this browser's IndexedDB — **export regularly; the backup file is the
+only safety net.**
 
 ## Development
 
