@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { DashboardPage } from './routes/DashboardPage';
 import { createArea } from '../services/areas';
 import { addManualSession } from '../services/sessions';
+import { createItem, setItemStatus } from '../services/items';
 import { ensureSettings } from '../data/db';
 import { resetDb } from '../test/resetDb';
 import { startOfWeek } from '../domain/time';
@@ -29,5 +30,14 @@ describe('DashboardPage', () => {
     expect(await screen.findByText(expected)).toBeInTheDocument();
     expect(screen.getByText(/Streak: 1 day/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export backup' })).toBeInTheDocument();
+  });
+
+  it('shows per-area coverage', async () => {
+    const a = await createArea({ name: 'A', preset: 'conceptual' });
+    const i = await createItem({ areaId: a.id, title: 'X', kind: 'note' });
+    await createItem({ areaId: a.id, title: 'Y', kind: 'note' });
+    await setItemStatus(i.id, 'learned');
+    render(<DashboardPage />);
+    expect(await screen.findByText('A: 1/2 items (50%)')).toBeInTheDocument();
   });
 });

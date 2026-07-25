@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../data/db';
+import { getSettings } from '../../data/queries';
 import { exportBackup, importBackup } from '../../services/backupService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 export function BackupPanel() {
-  const settings = useLiveQuery(() => db.settings.get('singleton'));
+  const settings = useLiveQuery(getSettings);
   const [errors, setErrors] = useState<string[]>([]);
 
   const onImport = async (file: File | undefined) => {
