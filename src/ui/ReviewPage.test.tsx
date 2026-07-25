@@ -4,8 +4,7 @@ import { ReviewPage } from './routes/ReviewPage';
 import { createArea } from '../services/areas';
 import { captureNow } from '../services/captures';
 import { createItem } from '../services/items';
-import { db } from '../data/db';
-import { ensureSettings } from '../data/db';
+import { db, ensureSettings } from '../data/db';
 import { resetDb } from '../test/resetDb';
 import { pickOption, setupUser } from '../test/ui';
 
@@ -14,9 +13,9 @@ describe('ReviewPage inbox', () => {
 
   it('promotes a capture to a new item and dismisses another', async () => {
     const user = setupUser();
-    const area = await createArea({ name: 'Algorithms', preset: 'practice' });
+    await createArea({ name: 'Algorithms', preset: 'practice' });
     const cap1 = await captureNow({ text: 'look into two pointers' });
-    const cap2 = await captureNow({ text: 'noise' });
+    await captureNow({ text: 'noise' });
     render(<ReviewPage />);
 
     const row = (await screen.findByText('look into two pointers')).closest('li')!;
@@ -30,6 +29,8 @@ describe('ReviewPage inbox', () => {
     await waitFor(async () => {
       expect((await db.captures.get(cap1.id))?.status).toBe('triaged');
     });
+    // UI reactivity: the capture row is removed from Inbox despite StatusSection rendering the same title
+    await waitFor(() => expect(row).not.toBeInTheDocument());
 
     const noiseRow = screen.getByText('noise').closest('li')!;
     await user.click(within(noiseRow).getByRole('button', { name: 'Dismiss' }));
