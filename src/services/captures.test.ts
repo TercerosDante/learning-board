@@ -53,4 +53,26 @@ describe('captures service', () => {
     expect((await db.captures.get(capture.id))?.status).toBe('dismissed');
     expect(await db.captures.count()).toBe(1);
   });
+
+  it('triage functions no-op on non-inbox captures', async () => {
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    const capture = await captureNow({ text: 'test capture' });
+    // Triage to a new item
+    await triageToNewItem(capture.id, { areaId: area.id, kind: 'note' });
+    const triaged = await db.captures.get(capture.id);
+    expect(triaged?.status).toBe('triaged');
+    const triagedToItemId = triaged?.triagedToItemId;
+    const initialItemCount = await db.items.count();
+    // Try to dismiss an already-triaged capture (should no-op)
+    await dismissCapture(capture.id);
+    const afterDismiss = await db.captures.get(capture.id);
+    expect(afterDismiss?.status).toBe('triaged');
+    expect(afterDismiss?.triagedToItemId).toBe(triagedToItemId);
+    // Try to triage again (should no-op)
+    await triageToNewItem(capture.id, { areaId: area.id, kind: 'note', title: 'different' });
+    const afterRetriage = await db.captures.get(capture.id);
+    expect(afterRetriage?.status).toBe('triaged');
+    expect(afterRetriage?.triagedToItemId).toBe(triagedToItemId);
+    expect(await db.items.count()).toBe(initialItemCount);
+  });
 });

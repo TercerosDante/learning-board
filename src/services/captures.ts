@@ -55,5 +55,7 @@ export async function attachToItem(captureId: string, itemId: string, now = new 
 }
 
 export async function dismissCapture(captureId: string): Promise<void> {
+  const capture = await db.captures.get(captureId);
+  if (!capture || capture.status !== 'inbox') return;
   await db.captures.update(captureId, { status: 'dismissed' });
 }
