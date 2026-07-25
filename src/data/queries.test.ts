@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { consistencySummary, listAreas } from './queries';
+import { consistencySummary, listAreas, coverageSummary, currentWeekPlan, inboxCaptures } from './queries';
 import { createArea, archiveArea } from '../services/areas';
-import { createItem, setDrillDone } from '../services/items';
+import { createItem, setDrillDone, setItemStatus } from '../services/items';
 import { addManualSession } from '../services/sessions';
+import { captureNow, dismissCapture } from '../services/captures';
+import { getOrCreateWeekPlan, updateWeekPlanEntry } from '../services/weekPlan';
 import { resetDb } from '../test/resetDb';
 
 describe('queries', () => {
@@ -28,5 +30,34 @@ describe('queries', () => {
     expect(s.targetMinutes).toBe(120);
     expect(s.perArea.find((p) => p.area.id === a.id)?.minutes).toBe(75);
     expect(s.streak).toBe(3); // Wed(attempt) + Thu + Fri
+  });
+
+  it('consistencySummary prefers current-week-plan targets over area defaults', async () => {
+    const a = await createArea({ name: 'A', preset: 'practice', weeklyTargetMinutes: 120 });
+    const now = new Date(2026, 6, 24, 21, 0);
+    const plan = await getOrCreateWeekPlan(now);
+    await updateWeekPlanEntry(plan.id, a.id, { targetMinutes: 90 });
+    const s = await consistencySummary(now);
+    expect(s.targetMinutes).toBe(90);
+    expect(s.perArea[0].targetMinutes).toBe(90);
+    expect(await currentWeekPlan(now)).not.toBeNull();
+  });
+
+  it('coverageSummary counts covered statuses per area', async () => {
+    const a = await createArea({ name: 'A', preset: 'conceptual' });
+    const i1 = await createItem({ areaId: a.id, title: '1', kind: 'note' });
+    await createItem({ areaId: a.id, title: '2', kind: 'note' });
+    await setItemStatus(i1.id, 'learned');
+    const cov = await coverageSummary();
+    expect(cov).toHaveLength(1);
+    expect(cov[0]).toMatchObject({ covered: 1, total: 2, ratio: 0.5 });
+  });
+
+  it('inboxCaptures returns only inbox captures, oldest first', async () => {
+    await captureNow({ text: 'first' }, new Date(2026, 6, 24, 10, 0));
+    await captureNow({ text: 'second' }, new Date(2026, 6, 24, 11, 0));
+    const gone = await captureNow({ text: 'gone' }, new Date(2026, 6, 24, 12, 0));
+    await dismissCapture(gone.id);
+    expect((await inboxCaptures()).map((c) => c.text)).toEqual(['first', 'second']);
   });
 });
