@@ -1,7 +1,7 @@
 import { useEffect, useReducer } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getActiveSession, stopSession, tickSession } from '../../services/sessions';
-import { minutesBetween } from '../../domain/time';
+import { sessionMinutes } from '../../domain/consistency';
 
 export function SessionBar() {
   const active = useLiveQuery(getActiveSession);
@@ -18,7 +18,7 @@ export function SessionBar() {
   }, [active?.id]);
 
   if (!active) return null;
-  const elapsed = Math.floor(minutesBetween(active.startedAt, new Date().toISOString()));
+  const elapsed = Math.floor(sessionMinutes(active, new Date()));
   return (
     <div className="session-bar">
       <span>Studying · {elapsed} min</span>

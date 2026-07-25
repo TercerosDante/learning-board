@@ -25,12 +25,16 @@ export async function importBackup(json: string, save: SaveFn = downloadJson, no
   const v = validateBackup(parsed);
   if (!v.ok) return v;
   await exportBackup(save, now); // §9 safety net: current state saved before replace
-  await db.transaction('rw', db.tables, async () => {
-    for (const table of db.tables) await table.clear();
-    for (const name of TABLE_NAMES) {
-      const rows = v.backup.tables[name];
-      if (rows.length > 0) await db.table(name).bulkAdd(rows as never[]);
-    }
-  });
+  try {
+    await db.transaction('rw', db.tables, async () => {
+      for (const table of db.tables) await table.clear();
+      for (const name of TABLE_NAMES) {
+        const rows = v.backup.tables[name];
+        if (rows.length > 0) await db.table(name).bulkAdd(rows as never[]);
+      }
+    });
+  } catch (e) {
+    return { ok: false, errors: ['import failed: ' + String(e)] };
+  }
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import { createArea } from './areas';
 import { createItem } from './items';
 import { db, ensureSettings } from '../data/db';
 import { resetDb } from '../test/resetDb';
+import { TABLE_NAMES, type TableName } from '../domain/backup';
 
 describe('backup service', () => {
   beforeEach(async () => {
@@ -45,5 +46,23 @@ describe('backup service', () => {
     expect((await importBackup('not json', () => {})).ok).toBe(false);
     expect((await importBackup('{"format":"wrong"}', () => {})).ok).toBe(false);
     expect(await db.areas.count()).toBe(before);
+  });
+
+  it('importBackup rejects a valid envelope with a malformed row and leaves existing data untouched', async () => {
+    const area = await createArea({ name: 'Keep me', preset: 'conceptual' });
+    const before = await db.areas.count();
+    const tables = {} as Record<TableName, unknown[]>;
+    for (const n of TABLE_NAMES) tables[n] = [];
+    tables.areas = [{ notAnId: true }]; // valid array, but rows don't satisfy the Area shape / primary key
+    const backup = {
+      format: 'learning-os-backup',
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      tables,
+    };
+    const result = await importBackup(JSON.stringify(backup), () => {});
+    expect(result.ok).toBe(false);
+    expect(await db.areas.count()).toBe(before);
+    expect((await db.areas.get(area.id))?.name).toBe('Keep me');
   });
 });

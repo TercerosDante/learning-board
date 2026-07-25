@@ -13,8 +13,12 @@ export function BackupPanel() {
       'Importing replaces ALL current data. A backup of the current data downloads first. Continue?'
     );
     if (!proceed) return;
-    const result = await importBackup(await file.text());
-    setErrors(result.ok ? [] : result.errors);
+    try {
+      const result = await importBackup(await file.text());
+      setErrors(result.ok ? [] : result.errors);
+    } catch (e) {
+      setErrors(['import failed: ' + String(e)]);
+    }
   };
 
   return (
