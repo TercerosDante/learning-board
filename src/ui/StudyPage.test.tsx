@@ -5,6 +5,7 @@ import { StudyPage } from './routes/StudyPage';
 import { createArea } from '../services/areas';
 import { createItem } from '../services/items';
 import { getActiveSession } from '../services/sessions';
+import { getOrCreateWeekPlan, updateWeekPlanEntry } from '../services/weekPlan';
 import { resetDb } from '../test/resetDb';
 
 describe('StudyPage', () => {
@@ -51,5 +52,17 @@ describe('StudyPage', () => {
     const checkbox = await screen.findByRole('checkbox', { name: /Daily kata/ });
     await user.click(checkbox);
     await waitFor(() => expect(checkbox).toBeChecked()); // liveQuery re-render is async
+  });
+
+  it("shows this week's focus items with one-tap start", async () => {
+    const user = userEvent.setup();
+    const area = await createArea({ name: 'A', preset: 'practice' });
+    const item = await createItem({ areaId: area.id, title: 'Two pointers', kind: 'practice' });
+    const plan = await getOrCreateWeekPlan();
+    await updateWeekPlanEntry(plan.id, area.id, { focusItemIds: [item.id] });
+    render(<StudyPage />);
+    expect(await screen.findByRole('heading', { name: "This week's focus" })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start focus Two pointers' }));
+    await waitFor(async () => expect((await getActiveSession())?.itemId).toBe(item.id));
   });
 });

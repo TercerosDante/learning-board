@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { listAreas, listItemsForArea } from '../../data/queries';
+import { currentWeekPlan, itemsByIds, listAreas, listItemsForArea } from '../../data/queries';
 import { addManualSession, getActiveSession, startSession } from '../../services/sessions';
 import { isDrillDoneToday, setDrillDone } from '../../services/items';
 import type { Area, Item } from '../../domain/types';
@@ -10,6 +10,37 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+function FocusSection() {
+  const plan = useLiveQuery(() => currentWeekPlan());
+  const ids = plan ? plan.entries.flatMap((e) => e.focusItemIds) : [];
+  const items = useLiveQuery(() => itemsByIds(ids), [ids.join('|')]);
+  if (!items || items.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">This week's focus</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-1">
+          {items.map((i) => (
+            <li key={i.id}>
+              {i.title}{' '}
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Start focus ${i.title}`}
+                onClick={() => void startSession({ itemId: i.id })}
+              >
+                Start
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
 
 function DrillRow({ item }: { item: Item }) {
   const done = useLiveQuery(() => isDrillDoneToday(item.id), [item.id]);
@@ -92,6 +123,7 @@ export function StudyPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Study</h2>
+      <FocusSection />
       {active?.itemId && <NoteEditor itemId={active.itemId} />}
       {(areas ?? []).map((a) => (
         <StudyAreaSection key={a.id} area={a} />
