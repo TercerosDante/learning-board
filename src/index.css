@@ -117,6 +117,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* Legacy: PlanPage.tsx still uses .card until Task 10 replaces it. */
-.card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
