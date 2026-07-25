@@ -24,6 +24,7 @@ describe('ReviewPage inbox', () => {
       expect(await db.items.count()).toBe(1);
       expect((await db.items.toArray())[0].title).toBe('look into two pointers');
     });
+    await waitFor(() => expect(screen.queryByText('look into two pointers')).not.toBeInTheDocument());
 
     const noiseRow = screen.getByText('noise').closest('li')!;
     await user.click(within(noiseRow).getByRole('button', { name: 'Dismiss' }));
