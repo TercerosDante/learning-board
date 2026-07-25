@@ -3,6 +3,7 @@ import type {
   Area, Topic, Item, Artifact, Session, Attempt,
   ReviewLogEntry, Capture, WeekPlan, MetricSnapshot, Settings,
 } from '../domain/types';
+import { CURRENT_SCHEMA_VERSION } from '../domain/backup';
 
 export class LearningDb extends Dexie {
   areas!: Table<Area, string>;
@@ -19,7 +20,7 @@ export class LearningDb extends Dexie {
 
   constructor() {
     super('learning-os');
-    this.version(1).stores({
+    this.version(CURRENT_SCHEMA_VERSION).stores({
       areas: 'id, orderIndex, archived',
       topics: 'id, areaId',
       items: 'id, areaId, topicId, status, kind, *tags',
@@ -41,7 +42,7 @@ export async function ensureSettings(now = new Date()): Promise<Settings> {
   const existing = await db.settings.get('singleton');
   if (existing) return existing;
   const iso = now.toISOString();
-  const settings: Settings = { id: 'singleton', schemaVersion: 1, createdAt: iso, updatedAt: iso };
+  const settings: Settings = { id: 'singleton', schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: iso, updatedAt: iso };
   await db.settings.put(settings);
   return settings;
 }
