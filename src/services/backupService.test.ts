@@ -30,10 +30,11 @@ describe('backup service', () => {
     await exportBackup((_n, json) => foreign.push(json));
     await createArea({ name: 'Extra (will vanish on import)', preset: 'minimal' });
 
-    const safety: string[] = [];
-    const result = await importBackup(foreign[0], (name) => safety.push(name));
+    const safety: { name: string; json: string }[] = [];
+    const result = await importBackup(foreign[0], (name, json) => safety.push({ name, json }));
     expect(result.ok).toBe(true);
     expect(safety).toHaveLength(1); // pre-import auto-backup happened
+    expect(safety[0].json).toContain('Extra (will vanish on import)'); // safety backup contains pre-import state
     expect(await db.areas.count()).toBe(1); // 'Extra' gone, snapshot restored
     expect(await db.items.count()).toBe(1);
   });
