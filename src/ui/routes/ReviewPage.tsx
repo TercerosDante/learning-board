@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { inboxCaptures, listAreas, listItemsForArea } from '../../data/queries';
 import { attachToItem, dismissCapture, triageToNewItem } from '../../services/captures';
-import type { Area, Capture, Item, ItemKind } from '../../domain/types';
+import { setItemStatus } from '../../services/items';
+import { BackupReminder } from '../components/BackupReminder';
+import type { Area, Capture, Item, ItemKind, ItemStatus } from '../../domain/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -10,6 +12,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const KINDS: ItemKind[] = ['note', 'practice', 'project', 'reading'];
 const NONE = 'none'; // Radix SelectItem must never have value=""
+const STATUSES: ItemStatus[] = ['untouched', 'in-progress', 'learned', 'needs-review', 'mastered'];
+
+function StatusSection({ area }: { area: Area }) {
+  const items = useLiveQuery(() => listItemsForArea(area.id), [area.id]);
+  if (!items || items.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">{area.name}</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {items.map((i) => (
+            <li key={i.id} className="flex items-center gap-2">
+              {i.title}
+              <Select value={i.status} onValueChange={(v) => void setItemStatus(i.id, v as ItemStatus)}>
+                <SelectTrigger aria-label={`Status of ${i.title}`} className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
 
 function TriageRow({ capture, areas }: { capture: Capture; areas: Area[] }) {
   const [areaId, setAreaId] = useState(capture.context.areaId ?? '');
@@ -88,6 +122,7 @@ export function ReviewPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Review</h2>
+      <BackupReminder />
       <Card>
         <CardHeader>
           <h3 className="font-semibold">Inbox{captures ? ` (${captures.length})` : ''}</h3>
@@ -101,6 +136,10 @@ export function ReviewPage() {
           </ul>
         </CardContent>
       </Card>
+      <h3 className="text-lg font-semibold">Item statuses</h3>
+      {(areas ?? []).map((a) => (
+        <StatusSection key={a.id} area={a} />
+      ))}
     </div>
   );
 }
