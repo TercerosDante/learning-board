@@ -6,7 +6,7 @@
 
 **Architecture:** Same four layers as phase 1. New pure domain functions (`coverage.ts`, backup-reminder rule), four service modules grow or appear (`items`, `topics`, `captures`, `weekPlan`), reads stay in `data/queries.ts`, and the UI gains one route (Review), three components (QuickCapture, BackupReminder, WeekPlanCard), and modifications to all four existing surfaces.
 
-**Tech Stack:** unchanged — TypeScript strict, React 18, react-router-dom v6, Dexie 4 + dexie-react-hooks, Vitest + jsdom + fake-indexeddb + Testing Library.
+**Tech Stack:** TypeScript strict, React 18, react-router-dom v6, Dexie 4 + dexie-react-hooks, Vitest + jsdom + fake-indexeddb + Testing Library — plus, new this phase: **Tailwind CSS v4 + shadcn/ui (Radix primitives)** as the component library (user decision, 2026-07-25). Task 0 installs the stack, migrates the phase-1 surfaces, and sets up the Radix test harness; all later UI tasks build with shadcn components.
 
 ## Global Constraints
 
@@ -17,22 +17,437 @@
 - **Inbox and reminder signals are passive and Review-scoped** (open-decisions D-6, D-14): no nav badges, no toasts. Backup reminder threshold: 14 days, Review surface only.
 - Conventions from phase 1 hold: `crypto.randomUUID()` IDs; ISO-8601 timestamps; injectable `now` parameter on every service/domain function; local-midnight days, Monday weeks (`dayKey`/`startOfWeek`); tests import `describe/it/expect` explicitly from `vitest`; commit after every task.
 - **Fold-in debt from the phase-1 ledger** (fix where this phase touches the code anyway): scoped form labels on Plan (duplicate-label ambiguity), `<form>`/Enter-to-submit, `weeklyTargetMinutes: 0` rendering as unset, BackupPanel reading Dexie directly (goes through a new `getSettings` query).
+- **shadcn/ui conventions (bind every UI task):** primitives come from `@/components/ui/*` (Button, Card, Input, Label, Textarea, Select, Checkbox — installed in Task 0). Radix `SelectItem` must NEVER have `value=""` (it throws) — use the `'none'` sentinel and map it to `''`/`undefined` in the handler. Select triggers get their accessible name via `<Label htmlFor>` + `id` on the trigger, or `aria-label` directly. Radix Checkbox uses `onCheckedChange` (not `onChange`) and pairs with `<Label htmlFor>`.
+- **UI test conventions:** any test touching a Radix Select uses `setupUser()` and `pickOption(user, trigger, name)` from `src/test/ui.ts` (Task 0) — `user.selectOptions` does NOT work on Radix selects. Checkbox assertions use `getByRole('checkbox', { name })` + `toBeChecked()` (aria-checked). The jsdom polyfills Radix needs (ResizeObserver, hasPointerCapture, scrollIntoView) live in `src/test/setup.ts` after Task 0 — later tasks must not re-add them.
 
 ## File Structure (phase-2 delta)
 
 ```
+components.json                                            (shadcn config, Task 0)
 src/
+  components/ui/  button/card/input/label/textarea/select/checkbox .tsx  (shadcn copy-in, Task 0)
+  lib/       utils.ts                                      (shadcn cn helper, Task 0)
   domain/    + coverage.ts (+ coverage.test.ts)            backup.ts gains reminder rule
   services/  + topics.ts  + captures.ts  + weekPlan.ts     items.ts gains setItemStatus/updateItem
              (+ topics.test.ts, captures.test.ts, weekPlan.test.ts; items.test.ts grows)
   data/      queries.ts gains getSettings/inboxCaptures/listTopicsForArea/itemsByIds/
              currentWeekPlan/coverageSummary; consistencySummary prefers week-plan targets
+  test/      + ui.ts (setupUser/pickOption)                setup.ts gains Radix polyfills (Task 0)
   ui/        + routes/ReviewPage.tsx
              + components/QuickCapture.tsx  + components/BackupReminder.tsx
              + components/WeekPlanCard.tsx
              modified: App.tsx, routes/PlanPage.tsx, routes/StudyPage.tsx,
-                       routes/DashboardPage.tsx, components/BackupPanel.tsx, index.css
-             (+ QuickCapture.test.tsx, ReviewPage.test.tsx; PlanPage/DashboardPage/StudyPage/App tests grow)
+                       routes/DashboardPage.tsx, components/BackupPanel.tsx,
+                       components/SessionBar.tsx, components/StaleSessionBanner.tsx,
+                       components/NoteEditor.tsx, index.css, vite.config.ts, tsconfig.json
+             (+ QuickCapture.test.tsx, ReviewPage.test.tsx, WeekPlanCard.test.tsx;
+                PlanPage/DashboardPage/StudyPage/App tests grow)
+```
+
+---
+
+### Task 0: UI stack — Tailwind v4 + shadcn/ui, Radix test harness, phase-1 surface migration
+
+**Files:**
+- Modify: `vite.config.ts`, `tsconfig.json`, `src/index.css`, `src/test/setup.ts`, `src/App.tsx`, `src/ui/components/SessionBar.tsx`, `src/ui/components/StaleSessionBanner.tsx`, `src/ui/components/NoteEditor.tsx`, `src/ui/components/BackupPanel.tsx`, `src/ui/routes/StudyPage.tsx`, `src/ui/routes/DashboardPage.tsx`
+- Create: `src/test/ui.ts` (plus shadcn-generated: `components.json`, `src/lib/utils.ts`, `src/components/ui/*.tsx`)
+- Test: NO new tests. **The exit gate is the existing suite: all 39 tests stay green, build stays green.** `PlanPage.tsx` and its test are deliberately NOT converted — Task 10 replaces both wholesale.
+
+**Interfaces:**
+- Consumes: the phase-1 codebase as it exists on this branch.
+- Produces: `@/components/ui/{button,card,input,label,textarea,select,checkbox}`; `@/lib/utils` (`cn`); path alias `@/*` → `src/*`; `setupUser()` / `pickOption()` in `src/test/ui.ts`; Radix jsdom polyfills in `src/test/setup.ts`. Every later UI task builds on exactly these.
+
+- [ ] **Step 1: Install and configure Tailwind v4**
+
+```bash
+npm install tailwindcss @tailwindcss/vite
+```
+
+Replace `vite.config.ts` with:
+
+```ts
+/// <reference types="vitest/config" />
+import path from 'node:path';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': path.resolve(__dirname, './src') },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
+});
+```
+
+Add to `tsconfig.json` `compilerOptions` (keep everything already there):
+
+```json
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+```
+
+Replace the first two rules of `src/index.css` (the `* { box-sizing… }` reset and the `body { … }` rule — Tailwind preflight covers both) with:
+
+```css
+@import "tailwindcss";
+```
+
+Keep the remaining legacy classes for now — `PlanPage` still uses `.card` until Task 10. (After the shadcn init in Step 2 rewrites this file, re-check that both the tailwind import/theme AND the legacy `.card`, `.banner`, `.session-bar`, `.app-header`, `textarea.note`, `.error` rules survive; the converted components stop using most of them this task, and Task 10 retires the rest.)
+
+- [ ] **Step 2: Initialize shadcn/ui and add the primitives**
+
+```bash
+npx shadcn@latest init -y -b neutral
+npx shadcn@latest add -y button card input label textarea select checkbox
+```
+
+If the CLI prompts despite the flags, accept defaults (style: default; CSS file: `src/index.css`; aliases `@/components` and `@/lib/utils`). Verify `src/components/ui/` now contains the seven components and `src/lib/utils.ts` exists.
+
+- [ ] **Step 3: Radix jsdom polyfills + test helper**
+
+Append to `src/test/setup.ts`:
+
+```ts
+// Radix UI needs these APIs that jsdom lacks
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = globalThis.ResizeObserver ?? (ResizeObserverStub as unknown as typeof ResizeObserver);
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {});
+Element.prototype.hasPointerCapture = Element.prototype.hasPointerCapture ?? (() => false);
+Element.prototype.setPointerCapture = Element.prototype.setPointerCapture ?? (() => {});
+Element.prototype.releasePointerCapture = Element.prototype.releasePointerCapture ?? (() => {});
+```
+
+Create `src/test/ui.ts`:
+
+```ts
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+export function setupUser() {
+  // Radix overlays toggle pointer-events on <body>; disable the check for stable tests
+  return userEvent.setup({ pointerEventsCheck: 0 });
+}
+
+export type User = ReturnType<typeof setupUser>;
+
+// Open a shadcn/Radix Select via its trigger, then pick an option (options render in a portal)
+export async function pickOption(user: User, trigger: HTMLElement, optionName: string | RegExp) {
+  await user.click(trigger);
+  await user.click(await screen.findByRole('option', { name: optionName }));
+}
+```
+
+- [ ] **Step 4: Convert the shell** — replace `src/App.tsx` with:
+
+```tsx
+import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
+import { DashboardPage } from './ui/routes/DashboardPage';
+import { PlanPage } from './ui/routes/PlanPage';
+import { StudyPage } from './ui/routes/StudyPage';
+import { SessionBar } from './ui/components/SessionBar';
+import { StaleSessionBanner } from './ui/components/StaleSessionBanner';
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <header className="flex items-center gap-6 border-b px-4 py-2">
+        <nav className="flex gap-4">
+          <NavLink to="/" className={({ isActive }) => (isActive ? 'font-bold' : '')}>Dashboard</NavLink>
+          <NavLink to="/plan" className={({ isActive }) => (isActive ? 'font-bold' : '')}>Plan</NavLink>
+          <NavLink to="/study" className={({ isActive }) => (isActive ? 'font-bold' : '')}>Study</NavLink>
+        </nav>
+        <SessionBar />
+      </header>
+      <StaleSessionBanner />
+      <main className="mx-auto max-w-4xl space-y-4 p-4">
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/plan" element={<PlanPage />} />
+          <Route path="/study" element={<StudyPage />} />
+        </Routes>
+      </main>
+    </BrowserRouter>
+  );
+}
+```
+
+- [ ] **Step 5: Convert SessionBar and StaleSessionBanner** (logic byte-identical — only the JSX below `return` changes)
+
+In `src/ui/components/SessionBar.tsx`, add `import { Button } from '@/components/ui/button';` and replace the returned JSX with:
+
+```tsx
+  return (
+    <div className="ml-auto flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">Studying · {elapsed} min</span>
+      <Button size="sm" variant="outline" onClick={() => void stopSession()}>
+        Stop
+      </Button>
+    </div>
+  );
+```
+
+In `src/ui/components/StaleSessionBanner.tsx`, add `import { Button } from '@/components/ui/button';` and replace the returned JSX with:
+
+```tsx
+  return (
+    <div className="mx-auto mt-2 max-w-4xl rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm">
+      A session from {new Date(stale.startedAt).toLocaleString()} is still running.{' '}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          void trimSessionToLastTick(stale.id);
+          setStale(null);
+        }}
+      >
+        End it at last activity
+      </Button>{' '}
+      <Button size="sm" variant="ghost" onClick={() => setStale(null)}>
+        Keep it running
+      </Button>
+    </div>
+  );
+```
+
+- [ ] **Step 6: Convert NoteEditor** (debounce/flush logic byte-identical — only imports and returned JSX change)
+
+In `src/ui/components/NoteEditor.tsx`, add:
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+```
+
+and replace the returned JSX (after the `if (!loaded) return null;` line) with:
+
+```tsx
+  return (
+    <div className="space-y-2 rounded-lg border p-4">
+      <Button size="sm" variant="outline" onClick={() => setPreview((p) => !p)}>
+        {preview ? 'Edit' : 'Preview'}
+      </Button>
+      {preview ? (
+        <div className="text-sm">
+          <ReactMarkdown>{text}</ReactMarkdown>
+        </div>
+      ) : (
+        <Textarea
+          className="min-h-48 font-mono"
+          aria-label="Notes"
+          value={text}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+      )}
+    </div>
+  );
+```
+
+- [ ] **Step 7: Convert StudyPage** — replace `src/ui/routes/StudyPage.tsx` with (logic identical to the current file, including the `Start ${area.name}` aria-label; only presentation changes — DrillRow now uses Radix Checkbox with `onCheckedChange`):
+
+```tsx
+import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { listAreas, listItemsForArea } from '../../data/queries';
+import { addManualSession, getActiveSession, startSession } from '../../services/sessions';
+import { isDrillDoneToday, setDrillDone } from '../../services/items';
+import type { Area, Item } from '../../domain/types';
+import { NoteEditor } from '../components/NoteEditor';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+function DrillRow({ item }: { item: Item }) {
+  const done = useLiveQuery(() => isDrillDoneToday(item.id), [item.id]);
+  return (
+    <li className="flex items-center gap-2">
+      <Checkbox
+        id={`drill-${item.id}`}
+        checked={done ?? false}
+        onCheckedChange={(checked) => void setDrillDone(item.id, checked === true)}
+      />
+      <Label htmlFor={`drill-${item.id}`}>{item.title}</Label>
+    </li>
+  );
+}
+
+function StudyAreaSection({ area }: { area: Area }) {
+  const items = useLiveQuery(() => listItemsForArea(area.id), [area.id]);
+  const [minutes, setMinutes] = useState('');
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">
+          {area.name}{' '}
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={`Start ${area.name}`}
+            onClick={() => void startSession({ areaId: area.id })}
+          >
+            Start
+          </Button>
+        </h3>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <ul className="space-y-1">
+          {(items ?? []).map((item) =>
+            area.profile.minimalMode && item.kind === 'practice' ? (
+              <DrillRow key={item.id} item={item} />
+            ) : (
+              <li key={item.id}>
+                {item.title}{' '}
+                <Button size="sm" variant="outline" onClick={() => void startSession({ itemId: item.id })}>
+                  Start
+                </Button>
+              </li>
+            )
+          )}
+        </ul>
+        <details>
+          <summary className="cursor-pointer text-sm text-muted-foreground">Log time without the timer</summary>
+          <div className="mt-2 flex items-center gap-2">
+            <Label htmlFor={`manual-${area.id}`}>Minutes</Label>
+            <Input
+              id={`manual-${area.id}`}
+              type="number"
+              className="w-24"
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+            />
+            <Button
+              size="sm"
+              onClick={() => {
+                const n = Number(minutes);
+                if (n > 0) void addManualSession({ areaId: area.id, minutes: n });
+                setMinutes('');
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </details>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function StudyPage() {
+  const areas = useLiveQuery(listAreas);
+  const active = useLiveQuery(getActiveSession);
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Study</h2>
+      {active?.itemId && <NoteEditor itemId={active.itemId} />}
+      {(areas ?? []).map((a) => (
+        <StudyAreaSection key={a.id} area={a} />
+      ))}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 8: Convert DashboardPage and BackupPanel** (rendered text nodes must stay byte-identical — the tests assert exact strings)
+
+Replace `src/ui/routes/DashboardPage.tsx` with:
+
+```tsx
+import { useLiveQuery } from 'dexie-react-hooks';
+import { consistencySummary } from '../../data/queries';
+import { BackupPanel } from '../components/BackupPanel';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+
+export function DashboardPage() {
+  const summary = useLiveQuery(() => consistencySummary());
+  if (!summary) return null;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Dashboard</h2>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">Consistency</h3>
+        </CardHeader>
+        <CardContent>
+          <p>
+            {summary.minutesThisWeek} / {summary.targetMinutes} min this week
+          </p>
+          <p>Streak: {summary.streak} day{summary.streak === 1 ? '' : 's'}</p>
+          <ul>
+            {summary.perArea.map(({ area, minutes }) => (
+              <li key={area.id}>
+                {area.name}: {minutes} min
+                {area.weeklyTargetMinutes ? ` / ${area.weeklyTargetMinutes} min` : ''}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+      <BackupPanel />
+    </div>
+  );
+}
+```
+
+In `src/ui/components/BackupPanel.tsx`: keep all logic (including the try/catch import flow) and replace only the imports/JSX shell —
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+```
+
+```tsx
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">Backup</h3>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p>
+          {settings?.lastExportAt
+            ? `Last export: ${new Date(settings.lastExportAt).toLocaleString()}`
+            : 'Never exported — your data lives only in this browser.'}
+        </p>
+        <div className="flex items-center gap-3">
+          <Button onClick={() => void exportBackup()}>Export backup</Button>
+          <label className="text-sm">
+            Import backup{' '}
+            <input type="file" accept="application/json" onChange={(e) => void onImport(e.target.files?.[0])} />
+          </label>
+        </div>
+        {errors.map((e) => (
+          <p key={e} className="text-sm text-red-700">{e}</p>
+        ))}
+      </CardContent>
+    </Card>
+  );
+```
+
+- [ ] **Step 9: Verify the exit gate**
+
+Run: `npm test`
+Expected: PASS — all 39 existing tests green with zero modifications to any test file.
+
+Run: `npm run build`
+Expected: green (path alias resolves via tsconfig paths + vite alias).
+
+Run: `npm run dev` briefly — the app should render with the new styling on Dashboard/Study; Plan still looks legacy (expected until Task 10).
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add -A
+git commit -m "feat(ui): adopt Tailwind v4 + shadcn/ui; migrate shell and phase-1 surfaces"
 ```
 
 ---
@@ -748,7 +1163,7 @@ git commit -m "feat(data): inbox/topics/coverage/week-plan queries; targets pref
 
 **Files:**
 - Create: `src/ui/components/QuickCapture.tsx`
-- Modify: `src/App.tsx` (add QuickCapture to the header), `src/index.css` (append styles)
+- Modify: `src/App.tsx` (add QuickCapture to the header)
 - Test: `src/ui/QuickCapture.test.tsx`
 
 **Interfaces:**
@@ -808,6 +1223,9 @@ Expected: FAIL — no Capture button in the app.
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { captureNow } from '../../services/captures';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 
 export function QuickCapture() {
   const [open, setOpen] = useState(false);
@@ -839,24 +1257,32 @@ export function QuickCapture() {
 
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)} title="Quick capture (Ctrl+K)">
+      <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)} title="Quick capture (Ctrl+K)">
         + Capture
-      </button>
+      </Button>
       {open && (
-        <div className="quick-capture card">
-          <textarea
-            ref={textareaRef}
-            aria-label="Quick capture"
-            placeholder="Stray thought, link, question… (Ctrl+Enter saves)"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.ctrlKey) void save();
-            }}
-          />
-          <button onClick={() => void save()}>Save to inbox</button>{' '}
-          <button onClick={() => setOpen(false)}>Cancel</button>
-        </div>
+        <Card className="fixed right-4 top-14 z-10 w-96 shadow-lg">
+          <CardContent className="space-y-2 pt-4">
+            <Textarea
+              ref={textareaRef}
+              aria-label="Quick capture"
+              placeholder="Stray thought, link, question… (Ctrl+Enter saves)"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.ctrlKey) void save();
+              }}
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => void save()}>
+                Save to inbox
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -879,13 +1305,7 @@ import { QuickCapture } from './ui/components/QuickCapture';
         <SessionBar />
 ```
 
-Append to `src/index.css`:
-
-```css
-.quick-capture { position: fixed; top: 3.2rem; right: 1rem; width: 24rem; background: #fff; z-index: 10; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
-.quick-capture textarea { width: 100%; min-height: 5rem; }
-input.estimate { width: 4.5rem; }
-```
+(No CSS changes — positioning and sizing are Tailwind classes on the component.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -895,7 +1315,7 @@ Expected: PASS — including the pre-existing App and StudyPage tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ui/components/QuickCapture.tsx src/App.tsx src/index.css src/ui/QuickCapture.test.tsx
+git add src/ui/components/QuickCapture.tsx src/App.tsx src/ui/QuickCapture.test.tsx
 git commit -m "feat(ui): global quick capture with route context (UC-8)"
 ```
 
@@ -919,28 +1339,25 @@ git commit -m "feat(ui): global quick capture with route context (UC-8)"
 ```tsx
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ReviewPage } from './routes/ReviewPage';
 import { createArea } from '../services/areas';
 import { captureNow } from '../services/captures';
 import { db } from '../data/db';
 import { resetDb } from '../test/resetDb';
+import { pickOption, setupUser } from '../test/ui';
 
 describe('ReviewPage inbox', () => {
   beforeEach(resetDb);
 
   it('promotes a capture to a new item and dismisses another', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await createArea({ name: 'Algorithms', preset: 'practice' });
     await captureNow({ text: 'look into two pointers' });
     await captureNow({ text: 'noise' });
     render(<ReviewPage />);
 
     const row = (await screen.findByText('look into two pointers')).closest('li')!;
-    await user.selectOptions(
-      within(row).getByLabelText('Area'),
-      within(row).getByRole('option', { name: 'Algorithms' })
-    );
+    await pickOption(user, within(row).getByLabelText('Area'), 'Algorithms');
     await user.click(within(row).getByRole('button', { name: 'New item' }));
     await waitFor(async () => {
       expect(await db.items.count()).toBe(1);
@@ -980,8 +1397,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { inboxCaptures, listAreas, listItemsForArea } from '../../data/queries';
 import { attachToItem, dismissCapture, triageToNewItem } from '../../services/captures';
 import type { Area, Capture, Item, ItemKind } from '../../domain/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const KINDS: ItemKind[] = ['note', 'practice', 'project', 'reading'];
+const NONE = 'none'; // Radix SelectItem must never have value=""
 
 function TriageRow({ capture, areas }: { capture: Capture; areas: Area[] }) {
   const [areaId, setAreaId] = useState(capture.context.areaId ?? '');
@@ -992,54 +1414,63 @@ function TriageRow({ capture, areas }: { capture: Capture; areas: Area[] }) {
     [areaId]
   );
   return (
-    <li className="card">
+    <li className="space-y-2 rounded-lg border p-4">
       <p>{capture.text}</p>
-      <p>
-        <small>
-          {new Date(capture.at).toLocaleString()}
-          {capture.context.route ? ` · from ${capture.context.route}` : ''}
-        </small>
+      <p className="text-sm text-muted-foreground">
+        {new Date(capture.at).toLocaleString()}
+        {capture.context.route ? ` · from ${capture.context.route}` : ''}
       </p>
-      <div>
-        <label>
-          Area{' '}
-          <select
-            value={areaId}
-            onChange={(e) => {
-              setAreaId(e.target.value);
-              setItemId('');
-            }}
-          >
-            <option value="">—</option>
+      <div className="flex flex-wrap items-center gap-2">
+        <Label htmlFor={`area-${capture.id}`}>Area</Label>
+        <Select
+          value={areaId || NONE}
+          onValueChange={(v) => {
+            setAreaId(v === NONE ? '' : v);
+            setItemId('');
+          }}
+        >
+          <SelectTrigger id={`area-${capture.id}`} className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>—</SelectItem>
             {areas.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
             ))}
-          </select>
-        </label>{' '}
-        <label>
-          Kind{' '}
-          <select value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
+          </SelectContent>
+        </Select>
+        <Label htmlFor={`kind-${capture.id}`}>Kind</Label>
+        <Select value={kind} onValueChange={(v) => setKind(v as ItemKind)}>
+          <SelectTrigger id={`kind-${capture.id}`} className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
             {KINDS.map((k) => (
-              <option key={k} value={k}>{k}</option>
+              <SelectItem key={k} value={k}>{k}</SelectItem>
             ))}
-          </select>
-        </label>{' '}
-        <button disabled={!areaId} onClick={() => void triageToNewItem(capture.id, { areaId, kind })}>
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={!areaId} onClick={() => void triageToNewItem(capture.id, { areaId, kind })}>
           New item
-        </button>{' '}
-        <label>
-          Item{' '}
-          <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
-            <option value="">—</option>
+        </Button>
+        <Label htmlFor={`item-${capture.id}`}>Item</Label>
+        <Select value={itemId || NONE} onValueChange={(v) => setItemId(v === NONE ? '' : v)}>
+          <SelectTrigger id={`item-${capture.id}`} className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>—</SelectItem>
             {(items ?? []).map((i) => (
-              <option key={i.id} value={i.id}>{i.title}</option>
+              <SelectItem key={i.id} value={i.id}>{i.title}</SelectItem>
             ))}
-          </select>
-        </label>{' '}
-        <button disabled={!itemId} onClick={() => void attachToItem(capture.id, itemId)}>
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={!itemId} onClick={() => void attachToItem(capture.id, itemId)}>
           Attach
-        </button>{' '}
-        <button onClick={() => void dismissCapture(capture.id)}>Dismiss</button>
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void dismissCapture(capture.id)}>
+          Dismiss
+        </Button>
       </div>
     </li>
   );
@@ -1049,17 +1480,21 @@ export function ReviewPage() {
   const areas = useLiveQuery(listAreas);
   const captures = useLiveQuery(inboxCaptures);
   return (
-    <div>
-      <h2>Review</h2>
-      <section className="card">
-        <h3>Inbox{captures ? ` (${captures.length})` : ''}</h3>
-        {captures?.length === 0 && <p>Inbox empty — nothing to triage.</p>}
-        <ul>
-          {(captures ?? []).map((c) => (
-            <TriageRow key={c.id} capture={c} areas={areas ?? []} />
-          ))}
-        </ul>
-      </section>
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Review</h2>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">Inbox{captures ? ` (${captures.length})` : ''}</h3>
+        </CardHeader>
+        <CardContent>
+          {captures?.length === 0 && <p>Inbox empty — nothing to triage.</p>}
+          <ul className="space-y-2">
+            {(captures ?? []).map((c) => (
+              <TriageRow key={c.id} capture={c} areas={areas ?? []} />
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1111,11 +1546,11 @@ describe('ReviewPage statuses and reminder', () => {
   beforeEach(resetDb);
 
   it('moves an item through the lifecycle manually', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const area = await createArea({ name: 'A', preset: 'conceptual' });
     const item = await createItem({ areaId: area.id, title: 'CAP', kind: 'note' });
     render(<ReviewPage />);
-    await user.selectOptions(await screen.findByLabelText('Status of CAP'), 'learned');
+    await pickOption(user, await screen.findByLabelText('Status of CAP'), 'learned');
     await waitFor(async () => expect((await db.items.get(item.id))?.status).toBe('learned'));
   });
 
@@ -1147,17 +1582,20 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { backupReminderDue } from '../../domain/backup';
 import { getSettings } from '../../data/queries';
 import { exportBackup } from '../../services/backupService';
+import { Button } from '@/components/ui/button';
 
 export function BackupReminder() {
   const settings = useLiveQuery(getSettings);
   if (settings === undefined) return null; // still loading — ensureSettings guarantees the row exists
   if (!backupReminderDue(settings.lastExportAt, new Date())) return null;
   return (
-    <div className="banner">
+    <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm">
       {settings.lastExportAt
         ? `Last backup was ${new Date(settings.lastExportAt).toLocaleDateString()} — time for a fresh export.`
         : 'No backup yet — your data lives only in this browser.'}{' '}
-      <button onClick={() => void exportBackup()}>Export backup</button>
+      <Button size="sm" variant="outline" onClick={() => void exportBackup()}>
+        Export backup
+      </Button>
     </div>
   );
 }
@@ -1171,7 +1609,7 @@ import { BackupReminder } from '../components/BackupReminder';
 import type { Area, Capture, Item, ItemKind, ItemStatus } from '../../domain/types';
 ```
 
-Add below `KINDS`:
+Add below `NONE`:
 
 ```tsx
 const STATUSES: ItemStatus[] = ['untouched', 'in-progress', 'learned', 'needs-review', 'mastered'];
@@ -1180,33 +1618,38 @@ function StatusSection({ area }: { area: Area }) {
   const items = useLiveQuery(() => listItemsForArea(area.id), [area.id]);
   if (!items || items.length === 0) return null;
   return (
-    <section className="card">
-      <h3>{area.name}</h3>
-      <ul>
-        {items.map((i) => (
-          <li key={i.id}>
-            {i.title}{' '}
-            <select
-              aria-label={`Status of ${i.title}`}
-              value={i.status}
-              onChange={(e) => void setItemStatus(i.id, e.target.value as ItemStatus)}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">{area.name}</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {items.map((i) => (
+            <li key={i.id} className="flex items-center gap-2">
+              {i.title}
+              <Select value={i.status} onValueChange={(v) => void setItemStatus(i.id, v as ItemStatus)}>
+                <SelectTrigger aria-label={`Status of ${i.title}`} className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 ```
 
-And in `ReviewPage`'s JSX, render `<BackupReminder />` directly under `<h2>Review</h2>`, and after the Inbox section:
+And in `ReviewPage`'s JSX, render `<BackupReminder />` directly under the `<h2 className="text-xl font-bold">Review</h2>` line, and after the Inbox Card:
 
 ```tsx
-      <h3>Item statuses</h3>
+      <h3 className="text-lg font-semibold">Item statuses</h3>
       {(areas ?? []).map((a) => (
         <StatusSection key={a.id} area={a} />
       ))}
@@ -1240,20 +1683,20 @@ git commit -m "feat(ui): manual lifecycle moves and backup reminder in Review"
 ```tsx
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { PlanPage } from './routes/PlanPage';
 import { db } from '../data/db';
 import { resetDb } from '../test/resetDb';
+import { pickOption, setupUser } from '../test/ui';
 
 describe('PlanPage', () => {
   beforeEach(resetDb);
 
   it('creates an area, a topic, and an item; assigns topic and estimate', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     render(<PlanPage />);
 
     await user.type(screen.getByLabelText('Area name'), 'Algorithms');
-    await user.selectOptions(screen.getByLabelText('Preset'), 'practice');
+    await pickOption(user, screen.getByLabelText('Preset'), 'practice');
     await user.click(screen.getByRole('button', { name: 'Add area' }));
     expect(await screen.findByRole('heading', { name: 'Algorithms' })).toBeInTheDocument();
 
@@ -1262,14 +1705,11 @@ describe('PlanPage', () => {
     expect(await screen.findByRole('heading', { name: /Patterns/ })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('New item in Algorithms'), 'Two pointers');
-    await user.selectOptions(screen.getByLabelText('Kind for Algorithms'), 'practice');
+    await pickOption(user, screen.getByLabelText('Kind for Algorithms'), 'practice');
     await user.click(screen.getByRole('button', { name: 'Add item' }));
     await screen.findByText('Two pointers');
 
-    await user.selectOptions(
-      screen.getByLabelText('Topic for Two pointers'),
-      screen.getByRole('option', { name: 'Patterns' })
-    );
+    await pickOption(user, screen.getByLabelText('Topic for Two pointers'), 'Patterns');
     await user.type(screen.getByLabelText('Estimate for Two pointers'), '30');
     await user.tab();
 
@@ -1281,7 +1721,7 @@ describe('PlanPage', () => {
   });
 
   it('Enter submits the area form', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     render(<PlanPage />);
     await user.type(screen.getByLabelText('Area name'), 'Quick{Enter}');
     expect(await screen.findByRole('heading', { name: 'Quick' })).toBeInTheDocument();
@@ -1294,7 +1734,7 @@ describe('PlanPage', () => {
 Run: `npx vitest run src/ui/PlanPage.test.tsx`
 Expected: FAIL — new labels and topic flow don't exist yet.
 
-- [ ] **Step 3: Implement** — replace `src/ui/routes/PlanPage.tsx` with:
+- [ ] **Step 3: Implement** — replace `src/ui/routes/PlanPage.tsx` with the code below. Also remove the legacy `.card` block from `src/index.css` — this was its last consumer.
 
 ```tsx
 import { useState } from 'react';
@@ -1305,9 +1745,15 @@ import { createItem, updateItem } from '../../services/items';
 import { createTopic, deleteTopic } from '../../services/topics';
 import type { Area, AreaPreset, Item, ItemKind, Topic } from '../../domain/types';
 import { WeekPlanCard } from '../components/WeekPlanCard';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const PRESETS: AreaPreset[] = ['conceptual', 'practice', 'project', 'time-only', 'minimal'];
 const KINDS: ItemKind[] = ['note', 'practice', 'project', 'reading'];
+const NONE = 'none'; // Radix SelectItem must never have value=""
 
 function NewAreaForm() {
   const [name, setName] = useState('');
@@ -1324,39 +1770,52 @@ function NewAreaForm() {
     setTarget('');
   };
   return (
-    <form
-      className="card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <h3>New area</h3>
-      <label>
-        Area name <input value={name} onChange={(e) => setName(e.target.value)} />
-      </label>{' '}
-      <label>
-        Preset{' '}
-        <select value={preset} onChange={(e) => setPreset(e.target.value as AreaPreset)}>
-          {PRESETS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-      </label>{' '}
-      <label>
-        Weekly target (min) <input type="number" value={target} onChange={(e) => setTarget(e.target.value)} />
-      </label>{' '}
-      <button type="submit">Add area</button>
-    </form>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">New area</h3>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <Label htmlFor="area-name">Area name</Label>
+          <Input id="area-name" className="w-48" value={name} onChange={(e) => setName(e.target.value)} />
+          <Label htmlFor="area-preset">Preset</Label>
+          <Select value={preset} onValueChange={(v) => setPreset(v as AreaPreset)}>
+            <SelectTrigger id="area-preset" className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESETS.map((p) => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Label htmlFor="area-target">Weekly target (min)</Label>
+          <Input
+            id="area-target"
+            type="number"
+            className="w-24"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          />
+          <Button type="submit">Add area</Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
 function EstimateInput({ item }: { item: Item }) {
   const [value, setValue] = useState(item.estimateMinutes?.toString() ?? '');
   return (
-    <input
+    <Input
       type="number"
-      className="estimate"
+      className="w-20"
       aria-label={`Estimate for ${item.title}`}
       placeholder="min"
       value={value}
@@ -1371,19 +1830,24 @@ function EstimateInput({ item }: { item: Item }) {
 
 function ItemRow({ item, topics }: { item: Item; topics: Topic[] }) {
   return (
-    <li>
+    <li className="flex flex-wrap items-center gap-2">
       {item.title}{' '}
-      <small>({item.kind} · {item.status})</small> <EstimateInput item={item} />{' '}
-      <select
-        aria-label={`Topic for ${item.title}`}
-        value={item.topicId ?? ''}
-        onChange={(e) => void updateItem(item.id, { topicId: e.target.value || undefined })}
+      <span className="text-sm text-muted-foreground">({item.kind} · {item.status})</span>
+      <EstimateInput item={item} />
+      <Select
+        value={item.topicId ?? NONE}
+        onValueChange={(v) => void updateItem(item.id, { topicId: v === NONE ? undefined : v })}
       >
-        <option value="">no topic</option>
-        {topics.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
-        ))}
-      </select>
+        <SelectTrigger aria-label={`Topic for ${item.title}`} className="w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>no topic</SelectItem>
+          {topics.map((t) => (
+            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </li>
   );
 }
@@ -1411,68 +1875,92 @@ function AreaSection({ area }: { area: Area }) {
     { items: itemList.filter((i) => !i.topicId || !topicList.some((t) => t.id === i.topicId)) },
   ];
   return (
-    <section className="card">
-      <h3>{area.name}</h3>
-      <p>
-        {area.weeklyTargetMinutes != null ? `Target ${area.weeklyTargetMinutes} min/week · ` : ''}
-        <button onClick={() => void archiveArea(area.id)}>Archive</button>
-      </p>
-      {groups.map((g) => (
-        <div key={g.topic?.id ?? 'no-topic'}>
-          {g.topic && (
-            <h4>
-              {g.topic.name}{' '}
-              <button aria-label={`Delete topic ${g.topic.name}`} onClick={() => void deleteTopic(g.topic!.id)}>
-                ×
-              </button>
-            </h4>
-          )}
-          <ul>
-            {g.items.map((i) => (
-              <ItemRow key={i.id} item={i} topics={topicList} />
-            ))}
-          </ul>
-        </div>
-      ))}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void addItem();
-        }}
-      >
-        <label>
-          New item in {area.name} <input value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>{' '}
-        <label>
-          Kind for {area.name}{' '}
-          <select value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
-            {KINDS.map((k) => (
-              <option key={k} value={k}>{k}</option>
-            ))}
-          </select>
-        </label>{' '}
-        <button type="submit">Add item</button>
-      </form>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void addTopic();
-        }}
-      >
-        <label>
-          New topic in {area.name} <input value={topicName} onChange={(e) => setTopicName(e.target.value)} />
-        </label>{' '}
-        <button type="submit">Add topic</button>
-      </form>
-    </section>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">{area.name}</h3>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm">
+          {area.weeklyTargetMinutes != null ? `Target ${area.weeklyTargetMinutes} min/week · ` : ''}
+          <Button size="sm" variant="ghost" onClick={() => void archiveArea(area.id)}>
+            Archive
+          </Button>
+        </p>
+        {groups.map((g) => (
+          <div key={g.topic?.id ?? 'no-topic'}>
+            {g.topic && (
+              <h4 className="font-medium">
+                {g.topic.name}{' '}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Delete topic ${g.topic.name}`}
+                  onClick={() => void deleteTopic(g.topic!.id)}
+                >
+                  ×
+                </Button>
+              </h4>
+            )}
+            <ul className="space-y-1">
+              {g.items.map((i) => (
+                <ItemRow key={i.id} item={i} topics={topicList} />
+              ))}
+            </ul>
+          </div>
+        ))}
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addItem();
+          }}
+        >
+          <Label htmlFor={`new-item-${area.id}`}>New item in {area.name}</Label>
+          <Input
+            id={`new-item-${area.id}`}
+            className="w-48"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Label htmlFor={`kind-${area.id}`}>Kind for {area.name}</Label>
+          <Select value={kind} onValueChange={(v) => setKind(v as ItemKind)}>
+            <SelectTrigger id={`kind-${area.id}`} className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k} value={k}>{k}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="submit" size="sm">Add item</Button>
+        </form>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addTopic();
+          }}
+        >
+          <Label htmlFor={`new-topic-${area.id}`}>New topic in {area.name}</Label>
+          <Input
+            id={`new-topic-${area.id}`}
+            className="w-48"
+            value={topicName}
+            onChange={(e) => setTopicName(e.target.value)}
+          />
+          <Button type="submit" size="sm">Add topic</Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
 export function PlanPage() {
   const areas = useLiveQuery(listAreas);
   return (
-    <div>
-      <h2>Plan</h2>
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Plan</h2>
       <WeekPlanCard />
       <NewAreaForm />
       {(areas ?? []).map((a) => (
@@ -1499,7 +1987,7 @@ Expected: PASS (2 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ui/routes/PlanPage.tsx src/ui/PlanPage.test.tsx src/ui/components/WeekPlanCard.tsx
+git add src/ui/routes/PlanPage.tsx src/ui/PlanPage.test.tsx src/ui/components/WeekPlanCard.tsx src/index.css
 git commit -m "feat(ui): topics, estimates, and scoped forms on the Plan surface"
 ```
 
@@ -1522,18 +2010,18 @@ git commit -m "feat(ui): topics, estimates, and scoped forms on the Plan surface
 ```tsx
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { WeekPlanCard } from './components/WeekPlanCard';
 import { createArea } from '../services/areas';
 import { createItem } from '../services/items';
 import { consistencySummary } from '../data/queries';
 import { resetDb } from '../test/resetDb';
+import { setupUser } from '../test/ui';
 
 describe('WeekPlanCard', () => {
   beforeEach(resetDb);
 
   it('sets up the week, overrides a target, and picks a focus item', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const a = await createArea({ name: 'A', preset: 'practice', weeklyTargetMinutes: 120 });
     await createItem({ areaId: a.id, title: 'Two pointers', kind: 'practice' });
     render(<WeekPlanCard />);
@@ -1568,14 +2056,19 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { currentWeekPlan, listAreas, listItemsForArea } from '../../data/queries';
 import { getOrCreateWeekPlan, updateWeekPlanEntry } from '../../services/weekPlan';
 import type { Area, WeekPlan } from '../../domain/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 function TargetInput({ plan, area }: { plan: WeekPlan; area: Area }) {
   const entry = plan.entries.find((e) => e.areaId === area.id);
   const [value, setValue] = useState(entry?.targetMinutes?.toString() ?? '');
   return (
-    <input
+    <Input
       type="number"
-      className="estimate"
+      className="inline-block w-20"
       aria-label={`Week target for ${area.name}`}
       placeholder="min"
       value={value}
@@ -1601,18 +2094,16 @@ function FocusPicker({ plan, area }: { plan: WeekPlan; area: Area }) {
   if (!items || items.length === 0) return null;
   return (
     <details>
-      <summary>Focus items ({focus.length})</summary>
-      <ul>
+      <summary className="cursor-pointer text-sm text-muted-foreground">Focus items ({focus.length})</summary>
+      <ul className="mt-1 space-y-1">
         {items.map((i) => (
-          <li key={i.id}>
-            <label>
-              <input
-                type="checkbox"
-                checked={focus.includes(i.id)}
-                onChange={(e) => toggle(i.id, e.target.checked)}
-              />{' '}
-              {i.title}
-            </label>
+          <li key={i.id} className="flex items-center gap-2">
+            <Checkbox
+              id={`focus-${i.id}`}
+              checked={focus.includes(i.id)}
+              onCheckedChange={(checked) => toggle(i.id, checked === true)}
+            />
+            <Label htmlFor={`focus-${i.id}`}>{i.title}</Label>
           </li>
         ))}
       </ul>
@@ -1626,24 +2117,32 @@ export function WeekPlanCard() {
   if (plan === undefined) return null; // loading
   if (plan === null) {
     return (
-      <section className="card">
-        <h3>This week</h3>
-        <button onClick={() => void getOrCreateWeekPlan()}>Set up this week</button>
-      </section>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">This week</h3>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => void getOrCreateWeekPlan()}>Set up this week</Button>
+        </CardContent>
+      </Card>
     );
   }
   return (
-    <section className="card">
-      <h3>This week (w/c {plan.weekStart})</h3>
-      <ul>
-        {(areas ?? []).map((area) => (
-          <li key={area.id}>
-            {area.name}: <TargetInput plan={plan} area={area} /> min
-            <FocusPicker plan={plan} area={area} />
-          </li>
-        ))}
-      </ul>
-    </section>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">This week (w/c {plan.weekStart})</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {(areas ?? []).map((area) => (
+            <li key={area.id}>
+              {area.name}: <TargetInput plan={plan} area={area} /> min
+              <FocusPicker plan={plan} area={area} />
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 ```
@@ -1698,40 +2197,49 @@ Replace `src/ui/routes/DashboardPage.tsx` with:
 import { useLiveQuery } from 'dexie-react-hooks';
 import { consistencySummary, coverageSummary } from '../../data/queries';
 import { BackupPanel } from '../components/BackupPanel';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 export function DashboardPage() {
   const summary = useLiveQuery(() => consistencySummary());
   const coverage = useLiveQuery(() => coverageSummary());
   if (!summary) return null;
   return (
-    <div>
-      <h2>Dashboard</h2>
-      <section className="card">
-        <h3>Consistency</h3>
-        <p>
-          {summary.minutesThisWeek} / {summary.targetMinutes} min this week
-        </p>
-        <p>Streak: {summary.streak} day{summary.streak === 1 ? '' : 's'}</p>
-        <ul>
-          {summary.perArea.map(({ area, minutes, targetMinutes }) => (
-            <li key={area.id}>
-              {area.name}: {minutes} min
-              {targetMinutes != null ? ` / ${targetMinutes} min` : ''}
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="card">
-        <h3>Coverage</h3>
-        {coverage && coverage.length === 0 && <p>No areas yet.</p>}
-        <ul>
-          {(coverage ?? []).map(({ area, covered, total, ratio }) => (
-            <li key={area.id}>
-              {area.name}: {covered}/{total} items ({Math.round(ratio * 100)}%)
-            </li>
-          ))}
-        </ul>
-      </section>
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Dashboard</h2>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">Consistency</h3>
+        </CardHeader>
+        <CardContent>
+          <p>
+            {summary.minutesThisWeek} / {summary.targetMinutes} min this week
+          </p>
+          <p>Streak: {summary.streak} day{summary.streak === 1 ? '' : 's'}</p>
+          <ul>
+            {summary.perArea.map(({ area, minutes, targetMinutes }) => (
+              <li key={area.id}>
+                {area.name}: {minutes} min
+                {targetMinutes != null ? ` / ${targetMinutes} min` : ''}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">Coverage</h3>
+        </CardHeader>
+        <CardContent>
+          {coverage && coverage.length === 0 && <p>No areas yet.</p>}
+          <ul>
+            {(coverage ?? []).map(({ area, covered, total, ratio }) => (
+              <li key={area.id}>
+                {area.name}: {covered}/{total} items ({Math.round(ratio * 100)}%)
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
       <BackupPanel />
     </div>
   );
@@ -1812,19 +2320,28 @@ function FocusSection() {
   const items = useLiveQuery(() => itemsByIds(ids), [ids.join('|')]);
   if (!items || items.length === 0) return null;
   return (
-    <section className="card">
-      <h3>This week's focus</h3>
-      <ul>
-        {items.map((i) => (
-          <li key={i.id}>
-            {i.title}{' '}
-            <button aria-label={`Start focus ${i.title}`} onClick={() => void startSession({ itemId: i.id })}>
-              Start
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">This week's focus</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-1">
+          {items.map((i) => (
+            <li key={i.id}>
+              {i.title}{' '}
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Start focus ${i.title}`}
+                onClick={() => void startSession({ itemId: i.id })}
+              >
+                Start
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 ```
@@ -1853,7 +2370,7 @@ git commit -m "feat(ui): weekly focus list on Study with one-tap start"
 - [ ] **Step 1: Run the full test suite**
 
 Run: `npm test`
-Expected: PASS — every phase-1 and phase-2 test green (13 phase-1 files + 4 new files; ~55 tests).
+Expected: PASS — every phase-1 and phase-2 test green (13 phase-1 files + 7 new files: coverage, topics, captures, weekPlan, QuickCapture, ReviewPage, WeekPlanCard; ≈57 tests).
 
 - [ ] **Step 2: Production build**
 
@@ -1893,3 +2410,4 @@ git commit -m "docs: README status for phase 2"
 1. **Spec coverage** — Phase 2 scope from `docs/implementation-plan.md`: global quick-capture with auto-context (T4, T7), inbox (T4, T6, T8), Review surface with triage + manual lifecycle + backup reminder (T8, T9), Plan surface topics/arranging/estimates/WeekPlan (T3, T5, T10, T11), coverage metric on dashboard (T1, T6, T12), statuses live manual-only (T2, T9). Litmus tests: friction invariants re-verified at app level (T7) and per-page (T13); no per-area special case introduced anywhere; **no schema change** (Global Constraints). Open decisions honored: D-5 (intentions, not calendar — T5/T11), D-6/D-14 (passive, Review-only signals — T9), D-11 (one flat topic level — T3), T-8 (empty capture context legal — T4).
 2. **Placeholder scan** — no TBDs; every step has full code or exact commands with expected results. The one intentional stub (WeekPlanCard in T10) is explicitly created and replaced in T11.
 3. **Type consistency** — `setItemStatus`/`updateItem` (T2) match T9/T10 call sites; `coverageOf`/`CoverageCounts` (T1) match `AreaCoverage` (T6) and the Dashboard render (T12); `currentWeekPlan` returns `WeekPlan | null` (T6) and both `WeekPlanCard` (T11) and `FocusSection` (T13) branch on `undefined`/`null` accordingly; `ConsistencySummary.perArea[].targetMinutes` (T6) matches the T12 destructuring; scoped Plan labels (T10 component) match the T10 test queries exactly.
+4. **shadcn consistency** — every Radix Select uses the `'none'` sentinel (never `value=""`); every Select trigger has an accessible name (`Label htmlFor`+`id` or `aria-label`); every Radix Checkbox uses `onCheckedChange` with a `Label htmlFor` pair; every test that opens a Radix Select goes through `pickOption` from `src/test/ui.ts` (T0); no task re-adds the jsdom polyfills T0 installed; Task 0's exit gate (39 phase-1 tests green, zero test-file edits) protects the migration itself.
