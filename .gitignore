@@ -1,2 +1,5 @@
 .serena
 .superpowers
+node_modules
+dist
+*.tsbuildinfo
