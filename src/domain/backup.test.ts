@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BACKUP_FORMAT, CURRENT_SCHEMA_VERSION, TABLE_NAMES, buildBackup, validateBackup } from './backup';
 
 function emptyTables() {
-  return Object.fromEntries(TABLE_NAMES.map((n) => [n, []])) as Record<(typeof TABLE_NAMES)[number], unknown[]>;
+  return Object.fromEntries(TABLE_NAMES.map((n) => [n, [] as unknown[]])) as Record<(typeof TABLE_NAMES)[number], unknown[]>;
 }
 
 describe('backup format', () => {
