@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../data/db';
+import { getSettings } from '../../data/queries';
 import { exportBackup, importBackup } from '../../services/backupService';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 export function BackupPanel() {
-  const settings = useLiveQuery(() => db.settings.get('singleton'));
+  const settings = useLiveQuery(getSettings);
   const [errors, setErrors] = useState<string[]>([]);
 
   const onImport = async (file: File | undefined) => {
@@ -22,21 +24,27 @@ export function BackupPanel() {
   };
 
   return (
-    <section className="card">
-      <h3>Backup</h3>
-      <p>
-        {settings?.lastExportAt
-          ? `Last export: ${new Date(settings.lastExportAt).toLocaleString()}`
-          : 'Never exported — your data lives only in this browser.'}
-      </p>
-      <button onClick={() => void exportBackup()}>Export backup</button>{' '}
-      <label>
-        Import backup{' '}
-        <input type="file" accept="application/json" onChange={(e) => void onImport(e.target.files?.[0])} />
-      </label>
-      {errors.map((e) => (
-        <p key={e} className="error">{e}</p>
-      ))}
-    </section>
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">Backup</h3>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p>
+          {settings?.lastExportAt
+            ? `Last export: ${new Date(settings.lastExportAt).toLocaleString()}`
+            : 'Never exported — your data lives only in this browser.'}
+        </p>
+        <div className="flex items-center gap-3">
+          <Button onClick={() => void exportBackup()}>Export backup</Button>
+          <label className="text-sm">
+            Import backup{' '}
+            <input type="file" accept="application/json" onChange={(e) => void onImport(e.target.files?.[0])} />
+          </label>
+        </div>
+        {errors.map((e) => (
+          <p key={e} className="text-sm text-red-700">{e}</p>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

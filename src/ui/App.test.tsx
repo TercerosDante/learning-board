@@ -6,10 +6,11 @@ import { resetDb } from '../test/resetDb';
 describe('App shell', () => {
   beforeEach(resetDb);
 
-  it('renders navigation for the three phase-1 surfaces', async () => {
+  it('renders navigation for the four surfaces', async () => {
     render(<App />);
     expect(await screen.findByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Plan' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Study' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Review' })).toBeInTheDocument();
   });
 });

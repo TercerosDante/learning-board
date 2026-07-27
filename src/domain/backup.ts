@@ -51,3 +51,10 @@ export function validateBackup(data: unknown): ValidateResult {
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, backup: d as unknown as BackupFile };
 }
+
+export const BACKUP_REMINDER_DAYS = 14;
+
+export function backupReminderDue(lastExportAt: string | undefined, now: Date): boolean {
+  if (!lastExportAt) return true;
+  return (now.getTime() - new Date(lastExportAt).getTime()) / 86_400_000 >= BACKUP_REMINDER_DAYS;
+}
