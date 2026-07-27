@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { inboxCaptures, listAreas, listItemsForArea } from '../../data/queries';
+import { dueItems, inboxCaptures, listAreas, listItemsForArea } from '../../data/queries';
 import { attachToItem, dismissCapture, triageToNewItem } from '../../services/captures';
 import { setItemStatus } from '../../services/items';
+import { recordReview, sweepDue } from '../../services/reviews';
 import { BackupReminder } from '../components/BackupReminder';
 import type { Area, Capture, Item, ItemKind, ItemStatus } from '../../domain/types';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const KINDS: ItemKind[] = ['note', 'practice', 'project', 'reading'];
 const NONE = 'none'; // Radix SelectItem must never have value=""
 const STATUSES: ItemStatus[] = ['untouched', 'in-progress', 'learned', 'needs-review', 'mastered'];
+
+function ReviewQueue() {
+  const due = useLiveQuery(dueItems);
+  const areas = useLiveQuery(listAreas);
+  if (!due || due.length === 0) return null;
+  const areaName = (id?: string) => areas?.find((a) => a.id === id)?.name ?? '';
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="font-semibold">Review queue ({due.length})</h3>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {due.map((i) => (
+            <li key={i.id} className="flex flex-wrap items-center gap-2">
+              <span>
+                {i.title}
+                {i.keyIdea ? <span className="text-sm text-muted-foreground"> — {i.keyIdea}</span> : null}
+                <span className="text-sm text-muted-foreground"> · {areaName(i.areaId)}</span>
+              </span>
+              <Button size="sm" aria-label={`Still know ${i.title}`} onClick={() => void recordReview(i.id, 'pass')}>
+                Still know it
+              </Button>
+              <Button size="sm" variant="outline" aria-label={`Forgot ${i.title}`} onClick={() => void recordReview(i.id, 'fail')}>
+                Forgot
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
 
 function StatusSection({ area }: { area: Area }) {
   const items = useLiveQuery(() => listItemsForArea(area.id), [area.id]);
@@ -117,12 +151,16 @@ function TriageRow({ capture, areas }: { capture: Capture; areas: Area[] }) {
 }
 
 export function ReviewPage() {
+  useEffect(() => {
+    void sweepDue();
+  }, []);
   const areas = useLiveQuery(listAreas);
   const captures = useLiveQuery(inboxCaptures);
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Review</h2>
       <BackupReminder />
+      <ReviewQueue />
       <Card>
         <CardHeader>
           <h3 className="font-semibold">Inbox{captures ? ` (${captures.length})` : ''}</h3>

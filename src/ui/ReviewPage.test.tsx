@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { ReviewPage } from './routes/ReviewPage';
 import { createArea } from '../services/areas';
 import { captureNow } from '../services/captures';
-import { createItem } from '../services/items';
+import { createItem, setItemStatus } from '../services/items';
 import { db, ensureSettings } from '../data/db';
 import { resetDb } from '../test/resetDb';
 import { pickOption, setupUser } from '../test/ui';
@@ -65,5 +65,23 @@ describe('ReviewPage statuses and reminder', () => {
     render(<ReviewPage />);
     await screen.findByRole('heading', { name: /Inbox/ });
     expect(screen.queryByText(/time for a fresh export/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ReviewPage queue', () => {
+  beforeEach(resetDb);
+
+  it('sweeps on mount, reviews an overdue item, and it leaves the queue', async () => {
+    const user = setupUser();
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    const item = await createItem({ areaId: area.id, title: 'CAP', kind: 'note' });
+    await setItemStatus(item.id, 'learned', new Date(2020, 0, 1)); // long overdue
+    render(<ReviewPage />);
+    await user.click(await screen.findByRole('button', { name: 'Still know CAP' }));
+    await waitFor(async () => {
+      expect((await db.items.get(item.id))?.status).toBe('learned');
+      expect(await db.reviewLog.count()).toBe(1);
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Still know CAP' })).not.toBeInTheDocument());
   });
 });
