@@ -2294,3 +2294,29 @@ git commit -m "docs: README quickstart for phase 1"
 1. **Spec coverage** — Phase 1 scope from `docs/implementation-plan.md`: four-layer structure (T1), schema v1 all tables (T5), migration harness = Dexie versioned schema (T5) with real migrations arriving at the first v2 schema change, areas + presets (T6, T11), items all four kinds + markdown artifact (T7, T11, T12), session engine incl. manual + stale recovery (T8, T12), consistency metric + minimal dashboard (T3, T9, T13), export/import + auto-backup + lastExportAt (T4, T9, T13), UC-5 done-tick = `Attempt{pass}` (T7, T12). Both §10 litmus tests are encoded as tests (T12 friction invariant; genericity holds — no per-area code paths anywhere).
 2. **Placeholder scan** — no TBDs; every step has full code or an exact command with expected output.
 3. **Type consistency** — names used across tasks match their defining task: `getActiveSession`/`startSession`/`stopSession`/`tickSession`/`addManualSession`/`getStaleActiveSession`/`trimSessionToLastTick` (T8); `createItem`/`touchItem`/`saveNote`/`getNoteText`/`setDrillDone`/`isDrillDoneToday` (T7); `listAreas`/`listItemsForArea`/`consistencySummary` (T9); `TABLE_NAMES` = Dexie table names (T4/T5).
+
+## Amendments (post final review, 2026-07-25)
+
+The final whole-branch code review (F1, F4, F7) surfaced gaps between this plan's task bodies
+and what phase 1 actually needed to ship correctly. The task bodies above are left as written —
+they're the historical record of what was planned — but phase 2 should be written against the
+corrected reality below, not against the original text:
+
+- **F1 — stale-session recovery is app-global, not Study-route-local.** `StaleSessionBanner`
+  lives in `src/ui/components/StaleSessionBanner.tsx` and is rendered from `src/App.tsx` (above
+  `<main>`, inside `BrowserRouter`), so a stale session from a previous browser session is
+  surfaced on whichever route the user lands on at launch — not only when they happen to visit
+  `/study`. `StudyPage` no longer renders it itself. Relatedly, active-session billing
+  (`sessionMinutes` in `src/domain/consistency.ts`) now clamps phantom time: if an active
+  session's `lastTickAt` is more than `STALE_BILLING_GAP_MINUTES` (10) stale relative to `now`,
+  minutes are billed up to `lastTickAt`, not `now` — an abandoned tab can no longer accrue
+  unbounded study minutes.
+- **F4 — notes autosave, they don't only save on blur.** `NoteEditor` debounces a save ~1s after
+  the last keystroke (in addition to the existing on-blur save), and flushes any pending save
+  when the item changes or the editor unmounts. Phase 2 work that touches `NoteEditor` should
+  assume "save on change" semantics, not "save on blur" semantics.
+- **F7 — area-level session start is a real, reachable UI affordance.** `StudyAreaSection`
+  renders a Start button next to the area heading (`startSession({ areaId: area.id })`), not
+  just per-item Start buttons. The plan/data model already supported area-scoped sessions
+  (`Session.itemId` optional); phase 1 just hadn't wired a control for it. Phase 2 planning
+  should treat "study an area without picking an item first" as an existing, tested capability.

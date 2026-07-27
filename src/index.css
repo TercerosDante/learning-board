@@ -1,0 +1,11 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; color: #222; }
+.app-header { display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+.app-header nav { display: flex; gap: 1rem; }
+.app-header a.active { font-weight: 700; }
+main { padding: 1rem; max-width: 60rem; margin: 0 auto; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+.session-bar { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+.banner { background: #fff7e0; border: 1px solid #e0c060; padding: 0.5rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+.error { color: #b00020; }
+textarea.note { width: 100%; min-height: 12rem; font-family: ui-monospace, monospace; }
