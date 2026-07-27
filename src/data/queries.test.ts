@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { consistencySummary, listAreas, coverageSummary, currentWeekPlan, inboxCaptures } from './queries';
+import { consistencySummary, listAreas, coverageSummary, currentWeekPlan, inboxCaptures, dueItems, focusItems, retentionSummary } from './queries';
 import { createArea, archiveArea } from '../services/areas';
 import { createItem, setDrillDone, setItemStatus } from '../services/items';
 import { addManualSession } from '../services/sessions';
@@ -59,5 +59,30 @@ describe('queries', () => {
     const gone = await captureNow({ text: 'gone' }, new Date(2026, 6, 24, 12, 0));
     await dismissCapture(gone.id);
     expect((await inboxCaptures()).map((c) => c.text)).toEqual(['first', 'second']);
+  });
+
+  it('dueItems returns review-enabled needs-review items; retentionSummary counts them', async () => {
+    const a = await createArea({ name: 'A', preset: 'conceptual' });
+    const i1 = await createItem({ areaId: a.id, title: 'due', kind: 'note' });
+    const i2 = await createItem({ areaId: a.id, title: 'fresh', kind: 'note' });
+    await setItemStatus(i1.id, 'needs-review');
+    await setItemStatus(i2.id, 'learned');
+    expect((await dueItems()).map((i) => i.title)).toEqual(['due']);
+    const r = await retentionSummary();
+    expect(r.global).toEqual({ fresh: 1, stale: 1, ratio: 0.5 });
+    expect(r.perArea[0].counts.stale).toBe(1);
+  });
+
+  it('focusItems excludes archived areas (phase-2 debt)', async () => {
+    const keep = await createArea({ name: 'Keep', preset: 'practice' });
+    const gone = await createArea({ name: 'Gone', preset: 'practice' });
+    const k = await createItem({ areaId: keep.id, title: 'K', kind: 'practice' });
+    const g = await createItem({ areaId: gone.id, title: 'G', kind: 'practice' });
+    const now = new Date(2026, 6, 24, 12, 0);
+    const plan = await getOrCreateWeekPlan(now);
+    await updateWeekPlanEntry(plan.id, keep.id, { focusItemIds: [k.id] });
+    await updateWeekPlanEntry(plan.id, gone.id, { focusItemIds: [g.id] });
+    await archiveArea(gone.id);
+    expect((await focusItems(now)).map((i) => i.title)).toEqual(['K']);
   });
 });

@@ -1,5 +1,6 @@
 import { db } from '../data/db';
 import { dayKey } from '../domain/time';
+import { initialReviewClock } from '../domain/srs';
 import type { Item, ItemKind, ItemStatus } from '../domain/types';
 
 const KIND_REVIEW_DEFAULT: Record<ItemKind, boolean> = {
@@ -87,7 +88,13 @@ export async function isDrillDoneToday(itemId: string, now = new Date()): Promis
 }
 
 export async function setItemStatus(id: string, status: ItemStatus, now = new Date()): Promise<void> {
-  await db.items.update(id, { status, updatedAt: now.toISOString() });
+  const item = await db.items.get(id);
+  if (!item) return;
+  const patch: Partial<Item> = { status, updatedAt: now.toISOString() };
+  if (status === 'learned' && item.review.enabled && !item.review.dueDate) {
+    patch.review = initialReviewClock(item.review, now);
+  }
+  await db.items.update(id, patch);
 }
 
 export async function updateItem(

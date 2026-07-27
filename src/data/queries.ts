@@ -1,6 +1,7 @@
 import { db } from './db';
 import { activityDays, minutesInWeek, sessionMinutes, streakDays } from '../domain/consistency';
 import { coverageOf, type CoverageCounts } from '../domain/coverage';
+import { retentionOf, type RetentionCounts } from '../domain/retention';
 import { dayKey, startOfWeek } from '../domain/time';
 import type { Area, Capture, Item, Settings, Topic, WeekPlan } from '../domain/types';
 
@@ -78,4 +79,32 @@ export async function consistencySummary(now = new Date()): Promise<ConsistencyS
     streak: streakDays(activityDays(sessions.map((s) => s.startedAt), attempts.map((a) => a.at)), dayKey(now)),
     perArea,
   };
+}
+
+export function dueItems(): Promise<Item[]> {
+  return db.items.where('status').equals('needs-review').filter((i) => i.review.enabled).sortBy('updatedAt');
+}
+
+export interface RetentionSummary {
+  global: RetentionCounts;
+  perArea: { area: Area; counts: RetentionCounts }[];
+}
+
+export async function retentionSummary(): Promise<RetentionSummary> {
+  const [areas, items] = await Promise.all([listAreas(), db.items.toArray()]);
+  const activeItems = items.filter((i) => areas.some((a) => a.id === i.areaId));
+  return {
+    global: retentionOf(activeItems),
+    perArea: areas.map((area) => ({ area, counts: retentionOf(items.filter((i) => i.areaId === area.id)) })),
+  };
+}
+
+export async function focusItems(now = new Date()): Promise<Item[]> {
+  const plan = await currentWeekPlan(now);
+  if (!plan) return [];
+  const areas = await listAreas();
+  const ids = plan.entries
+    .filter((e) => areas.some((a) => a.id === e.areaId))
+    .flatMap((e) => e.focusItemIds);
+  return itemsByIds(ids);
 }

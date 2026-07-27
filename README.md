@@ -6,11 +6,11 @@ See `docs/product-brief.md` (what & why), `docs/architecture.md`, `docs/data-mod
 
 ## Status
 
-Phase 2 (the loop): everything from phase 1, plus global quick-capture (Ctrl+K) with an
-inbox, a Review surface (triage, manual item lifecycle, backup reminder), topics and
-estimates and a weekly plan on the Plan surface, and the coverage metric on the dashboard.
-All data lives in this browser's IndexedDB — **export regularly; the backup file is the
-only safety net.**
+Phase 3 (retention): everything from phases 1–2, plus a minimal spaced-repetition
+scheduler (fixed 1/3/7/14/30/60/120-day ladder, pass/fail), automatic needs-review
+transitions, a review queue in the Review surface, the retention metric on the
+dashboard, and daily metric snapshots. All data lives in this browser's IndexedDB —
+**export regularly; the backup file is the only safety net.**
 
 ## Development
 

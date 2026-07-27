@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { currentWeekPlan, itemsByIds, listAreas, listItemsForArea } from '../../data/queries';
+import { focusItems, listAreas, listItemsForArea } from '../../data/queries';
 import { addManualSession, getActiveSession, startSession } from '../../services/sessions';
 import { isDrillDoneToday, setDrillDone } from '../../services/items';
 import type { Area, Item } from '../../domain/types';
@@ -12,9 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 function FocusSection() {
-  const plan = useLiveQuery(() => currentWeekPlan());
-  const ids = plan ? plan.entries.flatMap((e) => e.focusItemIds) : [];
-  const items = useLiveQuery(() => itemsByIds(ids), [ids.join('|')]);
+  const items = useLiveQuery(() => focusItems());
   if (!items || items.length === 0) return null;
   return (
     <Card>

@@ -5,7 +5,15 @@ import { ensureSettings } from './data/db';
 import './index.css';
 
 void ensureSettings()
-  .then(() => {
+  .then(async () => {
+    try {
+      const { sweepDue } = await import('./services/reviews');
+      const { snapshotToday } = await import('./services/snapshots');
+      await sweepDue();
+      await snapshotToday();
+    } catch (err) {
+      console.error('metrics bootstrap failed', err);
+    }
     createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
         <App />
