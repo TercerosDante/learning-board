@@ -65,4 +65,15 @@ describe('items service', () => {
     await updateItem(item.id, { estimateMinutes: undefined });
     expect((await db.items.get(item.id))?.estimateMinutes).toBeUndefined();
   });
+
+  it('entering learned starts the review clock once', async () => {
+    const area = await createArea({ name: 'A', preset: 'conceptual' });
+    const item = await createItem({ areaId: area.id, title: 'X', kind: 'note' });
+    await setItemStatus(item.id, 'learned', new Date(2026, 6, 27, 12, 0));
+    const first = (await db.items.get(item.id))!;
+    expect(first.review.dueDate).toBe('2026-07-28');
+    await setItemStatus(item.id, 'in-progress');
+    await setItemStatus(item.id, 'learned', new Date(2026, 7, 15, 12, 0));
+    expect((await db.items.get(item.id))?.review.dueDate).toBe('2026-07-28'); // clock not restarted
+  });
 });
