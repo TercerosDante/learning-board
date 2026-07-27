@@ -40,4 +40,14 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
     expect(await screen.findByText('A: 1/2 items (50%)')).toBeInTheDocument();
   });
+
+  it('shows retention with a stale item counted', async () => {
+    const a = await createArea({ name: 'A', preset: 'conceptual' });
+    const i1 = await createItem({ areaId: a.id, title: 'X', kind: 'note' });
+    const i2 = await createItem({ areaId: a.id, title: 'Y', kind: 'note' });
+    await setItemStatus(i1.id, 'learned');
+    await setItemStatus(i2.id, 'needs-review');
+    render(<DashboardPage />);
+    expect(await screen.findByText('50% fresh (1/2)')).toBeInTheDocument();
+  });
 });

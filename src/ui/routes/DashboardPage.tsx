@@ -1,11 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { consistencySummary, coverageSummary } from '../../data/queries';
+import { consistencySummary, coverageSummary, retentionSummary } from '../../data/queries';
 import { BackupPanel } from '../components/BackupPanel';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 export function DashboardPage() {
   const summary = useLiveQuery(() => consistencySummary());
   const coverage = useLiveQuery(() => coverageSummary());
+  const retention = useLiveQuery(() => retentionSummary());
   if (!summary) return null;
   return (
     <div className="space-y-4">
@@ -42,6 +43,32 @@ export function DashboardPage() {
               </li>
             ))}
           </ul>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <h3 className="font-semibold">Retention</h3>
+        </CardHeader>
+        <CardContent>
+          {retention && retention.global.fresh + retention.global.stale === 0 ? (
+            <p>No reviewable items yet.</p>
+          ) : retention ? (
+            <>
+              <p>
+                {Math.round(retention.global.ratio * 100)}% fresh ({retention.global.fresh}/
+                {retention.global.fresh + retention.global.stale})
+              </p>
+              <ul>
+                {retention.perArea
+                  .filter(({ counts }) => counts.fresh + counts.stale > 0)
+                  .map(({ area, counts }) => (
+                    <li key={area.id}>
+                      {area.name}: {counts.fresh}/{counts.fresh + counts.stale} fresh
+                    </li>
+                  ))}
+              </ul>
+            </>
+          ) : null}
         </CardContent>
       </Card>
       <BackupPanel />
